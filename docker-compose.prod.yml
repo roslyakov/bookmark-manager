@@ -1,0 +1,38 @@
+# Production (VPS) overlay.
+#
+# Assumptions (see README.md "Deployment" section):
+#   * PostgreSQL is managed outside this project (ansible + its own Compose
+#     project) and reachable only from localhost on this host. `migrate` and
+#     `bot` join its Docker network directly instead of using a host port.
+#   * Traefik is already running on this host as the reverse proxy /
+#     TLS terminator. `bot` joins Traefik's network and is routed to purely
+#     via labels — no host ports are published here.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  migrate:
+    networks:
+      - default
+      - db_external
+
+  bot:
+    networks:
+      - default
+      - db_external
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK}"
+      - "traefik.http.routers.bookmarks-bot.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`${TELEGRAM_WEBHOOK_PATH:-/telegram/webhook}`)"
+      - "traefik.http.routers.bookmarks-bot.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.bookmarks-bot.tls.certresolver=${TRAEFIK_CERTRESOLVER}"
+      - "traefik.http.services.bookmarks-bot.loadbalancer.server.port=8080"
+
+networks:
+  db_external:
+    external: true
+    name: ${EXTERNAL_DB_NETWORK}
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}

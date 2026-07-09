@@ -1,0 +1,29 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+web/.env*.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.log

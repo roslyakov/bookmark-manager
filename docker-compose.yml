@@ -1,0 +1,56 @@
+# Base Compose file — service definitions shared by every environment.
+#
+# This file alone is NOT meant to be run directly in most cases:
+#   * Local dev (bundled Postgres, no reverse proxy):
+#       docker compose -f docker-compose.yml -f docker-compose.local.yml \
+#         --profile local-db up --build
+#   * VPS / production (externally-managed Postgres + Traefik):
+#       docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# See README.md for details. `worker` and `web` services are added in later
+# phases of this project.
+services:
+  # Bundled PostgreSQL for local development only. Behind the `local-db`
+  # profile so it never starts unless explicitly requested — production
+  # deployments reuse an externally-managed Postgres instance instead.
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["local-db"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot migration runner: owns the schema via Alembic. Waits for the
+  # database itself (see db/entrypoint.sh) rather than declaring a Compose
+  # `depends_on: postgres`, since Postgres may be external to this project
+  # entirely (VPS) or a profiled service that's still starting (local dev).
+  migrate:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    env_file: .env
+    restart: "no"
+
+  # Telegram bot (webhook mode). Saves bookmarks + enqueues metadata jobs;
+  # never fetches metadata itself.
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    env_file: .env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
